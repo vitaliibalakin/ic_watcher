@@ -109,13 +109,14 @@ class Cond:
     def curr_state(self):
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
-        if val_1 and val_2 > 200:
-            if abs(val_2 - val_1) > 0.1 * val_1:
-                if not self.tout_run:
-                    self.tout_run = True
-                    self.timer.singleShot(3000, functools.partial(self.timer_run, self.dname + self.cnd['chans'][0]))
-            else:
-                print(self.dname + self.cnd['chans'][1], 'ok', val_2)
+        if val_1 and val_2:
+            if val_1 and val_2 > 200:
+                if abs(val_2 - val_1) > 0.1 * val_1:
+                    if not self.tout_run:
+                        self.tout_run = True
+                        self.timer.singleShot(3000, functools.partial(self.timer_run, self.dname + self.cnd['chans'][0]))
+                else:
+                    print(self.dname + self.cnd['chans'][1], 'ok', val_2, val_1)
 
     def vol_state(self):
         if abs(self.values[self.dname + '.' + self.cnd['chans'][0]]) > 10:
