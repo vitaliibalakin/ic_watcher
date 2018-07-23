@@ -21,9 +21,9 @@ class IcWatcher:
 
         self.dev_chans_list = []
 
-        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes']},
+        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000},
                                {'func': 'vol_state', 'chans': ['Umes']}]
-        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes']}]
+        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000}]
         self.conditions_cvh1000 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes']},
                                    {'func': 'is_on', 'cnd_chan_1': 'is_on'}]
 
@@ -54,13 +54,13 @@ class IcWatcher:
 
 
 class Dev:
-    def __init__(self, dname, dtype, dconditions, dmagnet):
+    def __init__(self, dname, dtype, dcnd, dmagnet):
         super(Dev, self).__init__()
         self.chans = []
         self.values = {}
         self.dname = dname
-        self.dconditions = dconditions
-        self.conditions_callback = {}
+        self.dcnd = dcnd
+        self.cnd_callback = {}
         self.sys_chans = {}
         # for dchan in dmagnet:
         #     chan = cda.DChan(dname + '.' + dchan)
@@ -70,18 +70,18 @@ class Dev:
             chan.valueChanged.connect(self.ps_change_state)
             self.chans.append(chan)
             self.values[chan.name] = None
-            for elem in self.dconditions:
+            for elem in self.dcnd:
                 try:
                     for x in elem['chans']:
                         if chan.name.split('.')[-1] == x:
-                            self.conditions_callback[chan.name] = getattr(Cond(self.dname, self.values, elem),
+                            self.cnd_callback[chan.name] = getattr(Cond(self.dname, self.values, elem),
                                                                           elem['func']) #, self.sys_chans)
                 except:
                     pass
 
     def ps_change_state(self, chan):
         self.values[chan.name] = chan.val
-        self.conditions_callback[chan.name]()
+        self.cnd_callback[chan.name]()
 
 
 class Cond:
@@ -99,7 +99,7 @@ class Cond:
     def timer_run(self, name):
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
-        print('on_update', name, 'FAIL', val_2)
+        print('on_update', name, 'FAIL', val_2, val_1)
         if val_1 and val_2 > 200:
             if abs(val_2 - val_1) > 0.1 * val_1:
                 # self.sys_chans['fail'].setValue(1)
@@ -114,7 +114,7 @@ class Cond:
                 if abs(val_2 - val_1) > 0.1 * val_1:
                     if not self.tout_run:
                         self.tout_run = True
-                        self.timer.singleShot(3000, functools.partial(self.timer_run, self.dname + self.cnd['chans'][0]))
+                        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname + self.cnd['chans'][0]))
                 else:
                     print(self.dname + self.cnd['chans'][1], 'ok', val_2, val_1)
 
