@@ -29,13 +29,13 @@ class IcWatcher:
 
         self.conditions_dict = {'UM15': self.conditions_um15, 'UM4': self.conditions_um4}
                                 # 'vch1000': self.conditions_cvh1000}
-        self.chans_dict = {'UM15': [], 'UM4': []} #, 'vch1000': []}
+        self.chans_dict = {'UM15': [], 'UM4': [], 'magnet': []} #, 'vch1000': []}
         self.devnames_dict = {'UM15': [], 'UM4': []} #, 'vch1000': []}
 
         self.cur = self.conn.cursor()
         self.cur.execute("select devtype.name, chan.name from chan,devtype_chans,devtype "
                          "where chan.id=devtype_chans.chan_id and devtype.id=devtype_chans.devtype_id and "
-                         "devtype.name in ('UM4', 'UM15') group by grouping sets((devtype.name, chan.name))")
+                         "devtype.name in ('UM4', 'UM15', 'magnet') group by grouping sets((devtype.name, chan.name))")
         for elem in self.cur.fetchall():
             self.chans_dict[elem[0]].append(elem[1])
         print(self.chans_dict)
@@ -49,20 +49,25 @@ class IcWatcher:
 
         for elem in self.devnames_dict:
             for dname in self.devnames_dict[elem]:
-                self.dev_chans_list.append(Dev(dname, self.chans_dict[elem], self.conditions_dict[elem]))
+                self.dev_chans_list.append(Dev(dname, self.chans_dict[elem], self.conditions_dict[elem],
+                                               self.chans_dict['magnet']))
 
 
 class Dev:
-    def __init__(self, dname, dtype, dconditions):
+    def __init__(self, dname, dtype, dconditions, dmagnet):
         super(Dev, self).__init__()
         self.chans = []
         self.values = {}
         self.dname = dname
         self.dconditions = dconditions
         self.conditions_callback = {}
+        self.sys_chans = {}
+        # for dchan in dmagnet:
+        #     chan = cda.DChan(dname + '.' + dchan)
+        #     self.sys_chans[dchan] = chan
         for dchan in dtype:
             chan = cda.DChan(dname + '.' + dchan)
-            chan.valueChanged.connect(self.callback)
+            chan.valueChanged.connect(self.ps_change_state)
             self.chans.append(chan)
             self.values[chan.name] = None
             for elem in self.dconditions:
@@ -70,21 +75,24 @@ class Dev:
                     for x in elem['chans']:
                         if chan.name.split('.')[-1] == x:
                             self.conditions_callback[chan.name] = getattr(Cond(self.dname, self.values, elem),
-                                                                          elem['func'])
+                                                                          elem['func']) #, self.sys_chans)
                 except:
                     pass
 
-    def callback(self, chan):
+    def ps_change_state(self, chan):
         self.values[chan.name] = chan.val
         self.conditions_callback[chan.name]()
 
 
 class Cond:
-    def __init__(self, dname, values, cnd):
+    def __init__(self, dname, values, cnd):  #, sys_chans):
         super(Cond, self).__init__()
+        self.chan_log = cda.VChan('ic_watcher.log', max_nelems=1024)
+        self.chan_ofr = cda.VChan('ic_watcher.ofr', max_nelems=1024)
         self.values = values
         self.dname = dname
         self.cnd = cnd
+        # self.sys_chans = sys_chans
         self.timer = QTimer()
         self.tout_run = False
 
@@ -94,6 +102,7 @@ class Cond:
         print('on_update', name, 'FAIL', val_2)
         if val_1 and val_2 > 200:
             if abs(val_2 - val_1) > 0.1 * val_1:
+                # self.sys_chans['fail'].setValue(1)
                 print("REAL FAIL, GUYS")
         self.tout_run = False
 
