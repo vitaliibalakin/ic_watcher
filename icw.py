@@ -2,6 +2,8 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
 
 import sys
+import json
+import datetime
 import psycopg2
 import signal
 import functools
@@ -21,7 +23,7 @@ class IcWatcher:
 
         self.dev_chans_list = []
 
-        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000},
+        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 1000},
                                {'func': 'vol_state', 'chans': ['Umes']}]
         self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000}]
         self.conditions_cvh1000 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes']},
@@ -87,8 +89,8 @@ class Dev:
 class Cond:
     def __init__(self, dname, values, cnd):  #, sys_chans):
         super(Cond, self).__init__()
-        self.chan_log = cda.VChan('ic_watcher.log', max_nelems=1024)
-        self.chan_ofr = cda.VChan('ic_watcher.ofr', max_nelems=1024)
+        self.chan_log = cda.StrChan('cxhw:2.ic_watcher.log', max_nelems=1024)
+        self.chan_ofr = cda.StrChan('cxhw:2.ic_watcher.ofr', max_nelems=1024)
         self.values = values
         self.dname = dname
         self.cnd = cnd
@@ -103,6 +105,14 @@ class Cond:
         if val_1 and val_2 > 200:
             if abs(val_2 - val_1) > 0.1 * val_1:
                 # self.sys_chans['fail'].setValue(1)
+                time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                log = time + '|' + self.dname + '|' + 'I_set_problem'
+                self.chan_log.setValue(json.dumps(log))
+
+                ofr = set()
+                ofr.update(self.chan_ofr.val)
+                ofr.add(self.dname)
+               # self.chan_ofr.setValue(json.dumps(ofr))
                 print("REAL FAIL, GUYS")
         self.tout_run = False
 
@@ -114,7 +124,8 @@ class Cond:
                 if abs(val_2 - val_1) > 0.1 * val_1:
                     if not self.tout_run:
                         self.tout_run = True
-                        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname + self.cnd['chans'][0]))
+                        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname +
+                                                                                       self.cnd['chans'][0]))
                 else:
                     print(self.dname + self.cnd['chans'][1], 'ok', val_2, val_1)
 
