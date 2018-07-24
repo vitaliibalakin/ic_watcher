@@ -14,7 +14,6 @@ class IcWatcherInfo(QMainWindow):
                          'ofr': cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024, on_update=1)}
         for chan in self.sys_info:
             self.sys_info[chan].valueChanged.connect(self.update_sys_info)
-
         self.btn_clr_logs.clicked.connect(functools.partial(self.clr, 'logs'))
         self.btn_clr_ofr.clicked.connect(functools.partial(self.clr, 'ofr'))
 
