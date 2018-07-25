@@ -108,17 +108,20 @@ class Cond:
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
         print('on_update', name, 'FAIL', val_2, val_1)
+        # code below sends info to logs & fail status
         if val_1 and val_2 > 200:
             if abs(val_2 - val_1) > 0.1 * val_1:
-                self.sys_chans['fail'].setValue(1)
                 time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                log = time + '|' + self.dname + '|' + 'I_set_problem'
-                self.sys_info_d['logs'].setValue(json.dumps(log))
+                log = str(time) + '|' + self.dname + '|' + 'I_set_problem'
+                self.sys_info_d['logs'].setValue(log)
 
-                ofr = self.sys_info_d['ofr'].val
-                ofr = ofr + '|' + self.dname.split('.')[-1]
-                self.sys_info_d['ofr'].setValue(json.dumps(ofr))
-                print("REAL FAIL, GUYS")
+                ofr_dict = json.loads(self.sys_info_d['ofr'].val)
+                ofr_dict['empty'] = False
+                ofr_dict[self.dname] = 1
+                self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
+
+                self.sys_chans['fail'].setValue(1)
+                # print("REAL FAIL, GUYS")
         self.tout_run = False
 
     def curr_state(self):
@@ -132,6 +135,13 @@ class Cond:
                         self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname +
                                                                                        self.cnd['chans'][0]))
                 else:
+                    if self.sys_chans['fail'].val:
+                        self.sys_chans['fail'].setValue(0)
+                        ofr_dict = json.loads(self.sys_info_d['ofr'].val)
+                        ofr_dict[self.dname] = 0
+                        if not ofr_dict[max(ofr_dict)]:
+                            ofr_dict['empty'] = True
+                        self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
                     print(self.dname + self.cnd['chans'][1], 'ok', val_2, val_1)
 
     def vol_state(self):

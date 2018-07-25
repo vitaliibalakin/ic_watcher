@@ -4,6 +4,7 @@ from PyQt5 import uic
 import sys
 import pycx4.qcda as cda
 import functools
+import json
 
 
 class IcWatcherInfo(QMainWindow):
@@ -17,21 +18,19 @@ class IcWatcherInfo(QMainWindow):
         self.btn_clr_logs.clicked.connect(functools.partial(self.clr, 'logs'))
         self.btn_clr_ofr.clicked.connect(functools.partial(self.clr, 'ofr'))
 
-    def update_sys_info(self, chan):
-        if chan.name == 'logs':
+    def update_sys_info(self, chan):        # later factory pattern will be here
+        if chan.name == 'cxhw:1.ic_watcher.logs':
             self.log_text.append(chan.val)
-        if chan.name == 'ofr':
-            for elem in chan.val.split('|'):
-                self.ofr_text.append(elem)
-
-    def ofr_update(self, chan):
-        ofr = chan.val.split('|')
-        if ofr:
-            for elem in ofr:
-                self.ofr_text.append(elem)
+        if chan.name == 'cxhw:1.ic_watcher.ofr':
+            self.ofr_text.clear()
+            chan_stat_dict = json.loads(chan.val)
+            for elem in chan_stat_dict:
+                if chan_stat_dict[elem]:
+                    self.ofr_text.append(elem)
 
     def clr(self, name):
         self.sys_info[name].setValue(' ')
+        self.sys_info['ofr'].setValue(json.dumps({"empty": True}))
 
 
 app = QApplication(['IcWatcherInfo'])
