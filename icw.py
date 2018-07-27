@@ -7,6 +7,7 @@ import datetime
 import psycopg2
 import signal
 import functools
+import operator
 import pycx4.qcda as cda
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -21,11 +22,8 @@ class IcWatcher:
         except:
             print("No access to DB")
 
-        # self.chan_log = cda.StrChan('cxhw:1.ic_watcher.logs', max_nelems=1024)
-        # self.chan_ofr = cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024)
-
-        self.sys_info_d = {'logs': cda.StrChan('cxhw:1.ic_watcher.logs', max_nelems=1024),
-                         'ofr': cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024)}
+        self.sys_info_d = {'logs': cda.StrChan('cxhw:1.ic_watcher.logs', max_nelems=1024, on_update=1),
+                           'ofr': cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024, on_update=1)}
 
         self.dev_chans_list = []
 
@@ -103,28 +101,46 @@ class Cond:
         self.sys_info_d = sys_info_d
         self.timer = QTimer()
         self.tout_run = False
+        self.error_code = ' '
+
+    def error_data_send(self):
+        if not self.sys_chans['fail'].val:
+            time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            log = str(time) + '|' + self.dname + '|' + self.error_code
+            self.sys_info_d['logs'].setValue(log)
+
+            ofr_dict = json.loads(self.sys_info_d['ofr'].val)
+            ofr_dict['empty'] = 0
+            ofr_dict[self.dname] = 1
+            self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
+
+            self.sys_chans['fail'].setValue(1)
+            print("REAL FAIL, GUYS", self.dname)
+
+    def fail_out_check(self):
+        print(self.dname, "FAIL OUT CHECK")
+        if self.sys_chans['fail'].val:
+            print(self.dname, "FAIL OUT CHECK11111")
+            self.sys_chans['fail'].setValue(0)
+            ofr_dict = json.loads(self.sys_info_d['ofr'].val)
+            print(ofr_dict)
+            ofr_dict[self.dname] = 0
+            print(ofr_dict)
+            if not ofr_dict[max(ofr_dict.items(), key=operator.itemgetter(1))[0]]:
+                ofr_dict['empty'] = 1
+            self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
 
     def timer_run(self, name):
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
         print('on_update', name, 'FAIL', val_2, val_1)
-        # code below sends info to logs & fail status
         if val_1 and val_2 > 200:
             if abs(val_2 - val_1) > 0.1 * val_1:
-                time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                log = str(time) + '|' + self.dname + '|' + 'I_set_problem'
-                self.sys_info_d['logs'].setValue(log)
-
-                ofr_dict = json.loads(self.sys_info_d['ofr'].val)
-                ofr_dict['empty'] = False
-                ofr_dict[self.dname] = 1
-                self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
-
-                self.sys_chans['fail'].setValue(1)
-                # print("REAL FAIL, GUYS")
+                self.error_data_send()
         self.tout_run = False
 
     def curr_state(self):
+        self.error_code = 'I_set_problem'
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
         if val_1 and val_2:
@@ -135,18 +151,15 @@ class Cond:
                         self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname +
                                                                                        self.cnd['chans'][0]))
                 else:
-                    if self.sys_chans['fail'].val:
-                        self.sys_chans['fail'].setValue(0)
-                        ofr_dict = json.loads(self.sys_info_d['ofr'].val)
-                        ofr_dict[self.dname] = 0
-                        if not ofr_dict[max(ofr_dict)]:
-                            ofr_dict['empty'] = True
-                        self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
-                    print(self.dname + self.cnd['chans'][1], 'ok', val_2, val_1)
+                    self.fail_out_check()
 
     def vol_state(self):
-        if abs(self.values[self.dname + '.' + self.cnd['chans'][0]]) > 10:
-            print(self.dname + '.' + self.cnd['chans'][0], 'high voltage')
+        self.error_code = 'U_mes_problem'
+        if abs(self.values[self.dname + '.' + self.cnd['chans'][0]]) >= 10:
+            self.error_data_send()
+            print('vlstas')
+        else:
+            self.fail_out_check()
 
     def is_on(self):
         print("is_on", self.dname + self.cnd['chans'][0], self.values[self.dname + '.' + self.cnd['chans'][0]])
