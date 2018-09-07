@@ -24,31 +24,59 @@ class IcWatcher:
 
         self.sys_info_d = {'logs': cda.StrChan('cxhw:1.ic_watcher.logs', max_nelems=1024, on_update=1),
                            'ofr': cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024, on_update=1)}
+        self.ofr_dict = {'empty': 1}
 
         self.dev_chans_list = []
 
-        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 100},
-                               {'func': 'vol_state', 'chans': ['Umes']}]
-        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000}]
+        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 5000,
+                                'down_lim': 200, 'err_code': 'I_mes_problem'},
+                               {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 10, 'down_lim': 0,
+                                'err_code': 'U_out_of_range'}]
+        self.conditions_vs = [{'func': 'range_state', 'chans': ['Imes'], 'up_lim': 256, 'down_lim': 0,
+                               'err_code': 'I_out_of_range'},
+                              {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 7, 'down_lim': 2,
+                               'err_code': 'U_out_of_range'}]
+        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 5000,
+                                 'down_lim': 200, 'err_code': 'I_mes_problem'}]
+        self.conditions_vch300 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 1000,
+                                   'down_lim': 0, 'err_code': 'I_mes_problem'}]
+        self.conditions_v300 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 1000,
+                                 'down_lim': 0, 'err_code': 'I_mes_problem'}]
+        self.conditions_pa10 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 1000,
+                                 'down_lim': 0, 'err_code': 'I_mes_problem'},
+                                {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 10, 'down_lim': 0,
+                                 'err_code': 'U_out_of_range'}]
         self.conditions_cvh1000 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes']},
                                    {'func': 'is_on', 'cnd_chan_1': 'is_on'}]
 
-        self.conditions_dict = {'UM15': self.conditions_um15, 'UM4': self.conditions_um4}
+        self.conditions_dict = {'UM15': self.conditions_um15, 'UM4': self.conditions_um4, 'vaciva': self.conditions_vs,
+                                'vac124': self.conditions_vs, 'vch300': self.conditions_vch300,
+                                'v300': self.conditions_v300, 'pa10': self.conditions_pa10}
                                 # 'vch1000': self.conditions_cvh1000}
-        self.chans_dict = {'UM15': [], 'UM4': [], 'magnet': []} #, 'vch1000': []}
-        self.devnames_dict = {'UM15': [], 'UM4': []} #, 'vch1000': []}
+        self.state_chans_dict = {'magnet': [], 'ion_pump': []}
+        self.choose_state_dict = {'UM15': 'magnet', 'UM4': 'magnet', 'vaciva': 'ion_pump', 'vac124': 'ion_pump',
+                                  'vch300': 'magnet', 'v300': 'magnet', 'pa10': 'magnet'}
+        self.chans_dict = {'UM15': [], 'UM4': [], 'vaciva': [], 'vac124': [], 'vch300': [], 'v300': [], 'pa10': []} #, 'vch1000': []}
+        self.devnames_dict = {'UM15': [], 'UM4': [], 'vaciva': [], 'vac124': [], 'vch300': [], 'v300': [], 'pa10': []} #, 'vch1000': []}
 
         self.cur = self.conn.cursor()
         self.cur.execute("select devtype.name, chan.name from chan,devtype_chans,devtype "
                          "where chan.id=devtype_chans.chan_id and devtype.id=devtype_chans.devtype_id and "
-                         "devtype.name in ('UM4', 'UM15', 'magnet') group by grouping sets((devtype.name, chan.name))")
+                         "devtype.name in ('magnet', 'ion_pump') group by grouping sets((devtype.name, chan.name))")
+        for elem in self.cur.fetchall():
+            self.state_chans_dict[elem[0]].append(elem[1])
+        print(self.state_chans_dict)
+
+        self.cur.execute("select devtype.name, chan.name from chan,devtype_chans,devtype "
+                         "where chan.id=devtype_chans.chan_id and devtype.id=devtype_chans.devtype_id and "
+                         "devtype.name in ('UM4', 'UM15', 'vaciva', 'vac124', 'vch300', 'v300', 'pa10') group by grouping sets((devtype.name, chan.name))")
         for elem in self.cur.fetchall():
             self.chans_dict[elem[0]].append(elem[1])
         print(self.chans_dict)
 
         self.cur.execute("select devtype.name, namesys.name || '.' || dev.name as full_name from dev,dev_devtype,devtype, namesys "
                          "where dev.id=dev_devtype.dev_id and devtype.id=dev_devtype.devtype_id and namesys.id=dev.namesys_id and "
-                         "devtype.name in ('UM4', 'UM15') group by grouping sets((devtype.name, full_name))")
+                         "devtype.name in ('UM4', 'UM15', 'vaciva', 'vac124', 'vch300', 'v300', 'pa10') group by grouping sets((devtype.name, full_name))")
         for elem in self.cur.fetchall():
             self.devnames_dict[elem[0]].append(elem[1])
         print(self.devnames_dict)
@@ -56,19 +84,18 @@ class IcWatcher:
         for elem in self.devnames_dict:
             for dname in self.devnames_dict[elem]:
                 self.dev_chans_list.append(Dev(dname, self.chans_dict[elem], self.conditions_dict[elem],
-                                               self.chans_dict['magnet'], self.sys_info_d))
+                                               self.state_chans_dict[self.choose_state_dict[elem]],
+                                               self.sys_info_d, self.ofr_dict))
 
 
 class Dev:
-    def __init__(self, dname, dtype, dcnd, dmagnet, sys_info_d):
+    def __init__(self, dname, dtype, dcnd, dstate_chans, sys_info_d, ofr_dict):
         super(Dev, self).__init__()
         self.chans = []
         self.values = {}
-        self.dname = dname
-        self.dcnd = dcnd
         self.cnd_callback = {}
         self.sys_chans = {}
-        for dchan in dmagnet:
+        for dchan in dstate_chans:
             chan = cda.DChan('cxhw:1' + '.' + dname.split('.')[-1] + '.' + dchan)
             self.sys_chans[dchan] = chan
         for dchan in dtype:
@@ -76,29 +103,32 @@ class Dev:
             chan.valueChanged.connect(self.ps_change_state)
             self.chans.append(chan)
             self.values[chan.name] = None
-            for elem in self.dcnd:
+            for elem in dcnd:
                 try:
-                    for x in elem['chans']:
-                        if chan.name.split('.')[-1] == x:
-                            self.cnd_callback[chan.name] = getattr(Cond(self.dname, self.values, elem, self.sys_chans,
-                                                                        sys_info_d),
-                                                                   elem['func'])
+                    for cnd_name in elem['chans']:
+                        if chan.name.split('.')[-1] == cnd_name:
+                            self.cnd_callback[chan.name] = getattr(Cond(dname, self.values, elem, self.sys_chans,
+                                                                        sys_info_d, ofr_dict), elem['func'])(False)
                 except:
                     pass
 
     def ps_change_state(self, chan):
         self.values[chan.name] = chan.val
-        self.cnd_callback[chan.name]()
+        try:
+            self.cnd_callback[chan.name]()
+        except:
+            pass
 
 
 class Cond:
-    def __init__(self, dname, values, cnd, sys_chans, sys_info_d):
+    def __init__(self, dname, values, cnd, sys_chans, sys_info_d, ofr_dict):
         super(Cond, self).__init__()
         self.values = values
         self.dname = dname
         self.cnd = cnd
         self.sys_chans = sys_chans
         self.sys_info_d = sys_info_d
+        self.ofr_dict = ofr_dict
         self.timer = QTimer()
         self.tout_run = False
         self.error_code = ' '
@@ -106,62 +136,65 @@ class Cond:
     def error_data_send(self):
         if not self.sys_chans['fail'].val:
             time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            log = str(time) + '|' + self.dname + '|' + self.error_code
+            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
             self.sys_info_d['logs'].setValue(log)
 
-            ofr_dict = json.loads(self.sys_info_d['ofr'].val)
-            ofr_dict['empty'] = 0
-            ofr_dict[self.dname] = 1
-            self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
+            self.ofr_dict['empty'] = 0
+            self.ofr_dict[self.dname.split('.')[-1]] = 1
+            print(self.ofr_dict)
+            self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_dict))
 
             self.sys_chans['fail'].setValue(1)
-            print("REAL FAIL, GUYS", self.dname)
+            print("REAL FAIL, GUYS", self.dname, self.error_code)
 
     def fail_out_check(self):
-        print(self.dname, "FAIL OUT CHECK")
         if self.sys_chans['fail'].val:
-            print(self.dname, "FAIL OUT CHECK11111")
             self.sys_chans['fail'].setValue(0)
-            ofr_dict = json.loads(self.sys_info_d['ofr'].val)
-            print(ofr_dict)
-            ofr_dict[self.dname] = 0
-            print(ofr_dict)
-            if not ofr_dict[max(ofr_dict.items(), key=operator.itemgetter(1))[0]]:
-                ofr_dict['empty'] = 1
-            self.sys_info_d['ofr'].setValue(json.dumps(ofr_dict))
+            self.ofr_dict[self.dname.split('.')[-1]] = 0
+            print(self.ofr_dict)
+            if not self.ofr_dict[max(self.ofr_dict.items(), key=operator.itemgetter(1))[0]]:
+                self.ofr_dict['empty'] = 1
+            self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_dict))
+            print("UNCHECKED FAIL", self.dname)
 
-    def timer_run(self, name):
+    # def curr_timer_run(self):
+    #     val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
+    #     val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
+    #     print('on_update', self.dname, 'FAIL', val_2, val_1)
+    #     if abs(val_1) and abs(val_2) > 200:
+    #         if abs(val_2 - val_1) > 0.1 * val_1:
+    #             self.error_data_send()
+    #     self.tout_run = False
+
+    def curr_state(self, t_call):
+        self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
-        print('on_update', name, 'FAIL', val_2, val_1)
-        if val_1 and val_2 > 200:
-            if abs(val_2 - val_1) > 0.1 * val_1:
-                self.error_data_send()
-        self.tout_run = False
-
-    def curr_state(self):
-        self.error_code = 'I_set_problem'
-        val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
-        val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
-        if val_1 and val_2:
-            if val_1 and val_2 > 200:
+        if not t_call:    # Not-timer called curr_state
+            if val_1 and val_2:
+                if self.cnd['up_lim'] > abs(val_1) and abs(val_2) >= self.cnd['down_lim']:
+                    if abs(val_2 - val_1) > 0.1 * val_1:
+                        if not self.tout_run:
+                            self.tout_run = True
+                            self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.curr_state, True))
+                    else:
+                        self.fail_out_check()
+        else:    # Timer called curr_state
+            if abs(val_1) and abs(val_2) > 200:
                 if abs(val_2 - val_1) > 0.1 * val_1:
-                    if not self.tout_run:
-                        self.tout_run = True
-                        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.timer_run, self.dname +
-                                                                                       self.cnd['chans'][0]))
-                else:
-                    self.fail_out_check()
+                    self.error_data_send()
+            self.tout_run = False
 
-    def vol_state(self):
-        self.error_code = 'U_mes_problem'
-        if abs(self.values[self.dname + '.' + self.cnd['chans'][0]]) >= 10:
-            self.error_data_send()
-            print('vlstas')
-        else:
+    def range_state(self, t_call):
+        self.error_code = self.cnd['err_code']
+        val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
+        if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim']:
             self.fail_out_check()
+        else:
+            self.error_data_send()
+            print('r_state')
 
-    def is_on(self):
+    def is_on(self, t_call):
         print("is_on", self.dname + self.cnd['chans'][0], self.values[self.dname + '.' + self.cnd['chans'][0]])
 
 
