@@ -220,6 +220,8 @@ class Cond:
             if self.values[self.dname + '.' + self.dchan]:
                 self.aout_run = 1
                 self.timer.singleShot(self.cnd['wait_time'], self.reset_ilks)
+            else:
+                self.fail_out_check()
         if in_call:
             self.aout_run = 0
             if self.values[self.dname + '.' + self.dchan]:
