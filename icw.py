@@ -218,25 +218,23 @@ class Cond:
     def ilk(self, in_call):
         if not in_call:
             if self.values[self.dname + '.' + self.dchan]:
-                self.aout_run = 1
                 self.timer.singleShot(self.cnd['wait_time'], self.reset_ilks)
             else:
                 self.fail_out_check()
+
         if in_call:
-            self.aout_run = 0
             if self.values[self.dname + '.' + self.dchan]:
                 self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_powerless'
                 self.error_data_send()
             else:
                 self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_turned_on'
-                self.error_data_send()
+                time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
+                self.sys_info_d['logs'].setValue(log)
 
     def reset_ilks(self):
-        if self.aout_run == 1:
-            self.sys_chans['rst_ikls'].setValue(1)
-            self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.ilk, True))
-        else:
-            self.error_data_send()
+        self.sys_chans['rst_ikls'].setValue(1)
+        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.ilk, True))
 
 
 app = QApplication(['IcWatcher'])
