@@ -26,10 +26,12 @@ class IcWatcherInfo(QMainWindow):
     def update_ofr(self, val):
         self.ofr_text.clear()
         print(val)
-        chan_stat_dict = json.loads(val)
-        for elem in chan_stat_dict:
-            if chan_stat_dict[elem]:
+        chan_stat_list = json.loads(val)
+        if chan_stat_list:
+            for elem in chan_stat_list:
                 self.ofr_text.append(elem)
+        else:
+            self.ofr_text.setText('OK')
 
 
 app = QApplication(['IcWatcherInfo'])
