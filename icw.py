@@ -8,6 +8,7 @@ import psycopg2
 import signal
 import functools
 import operator
+import numpy as np
 import pycx4.qcda as cda
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -106,6 +107,7 @@ class IcWatcher:
 class Dev:
     def __init__(self, dname, dtype, dcnd, dstate_chans, sys_info_d, ofr_list):
         super(Dev, self).__init__()
+        self.fail_count = np.zeros((4,))
         self.chans = []
         self.values = {}
         self.cnd_callback = {}
@@ -134,22 +136,25 @@ class Dev:
                         if chan.name.split('.')[-1] == cnd_name:
                             # print(chan.name, cnd_name)
                             self.cnd_callback[chan.name] = getattr(Cond(dname, dchan, self.values, elem, self.sys_chans,
-                                                                        sys_info_d, ofr_list), elem['func'])
-                except:
-                    pass
+                                                                        sys_info_d, ofr_list, self.fail_count),
+                                                                   elem['func'])
+                except Exception as err:
+                    print('callbacks creating', err)
 
     def ps_change_state(self, chan):
         self.values[chan.name] = chan.val
-        try:
+        if chan.name in self.cnd_callback:
             self.cnd_callback[chan.name](False)
-            # print(chan.name, chan.val)
-        except Exception as err:
-            print(err)
+        else:
+            pass
+            # print('kek')
 
 
 class Cond:
-    def __init__(self, dname, dchan, values, cnd, sys_chans, sys_info_d, ofr_list):
+    def __init__(self, dname, dchan, values, cnd, sys_chans, sys_info_d, ofr_list, fail_count):
         super(Cond, self).__init__()
+        # 0 position is curr_state, 1 is range_state, 2 is is_on, 3 is ilk
+        self.fail_count = fail_count
         self.values = values
         self.dname = dname
         self.dchan = dchan
@@ -165,7 +170,7 @@ class Cond:
     def error_data_send(self):
         print(self.dname, 'error_data_send')
         print(self.sys_chans['fail'].val)
-        if not self.sys_chans['fail'].val:
+        if np.count_nonzero(self.fail_count):
             time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
             self.sys_info_d['logs'].setValue(log)
@@ -176,14 +181,15 @@ class Cond:
             self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
 
             self.sys_chans['fail'].setValue(1)
-            print(self.sys_chans['fail'].name)
             print("REAL FAIL, GUYS", self.dname, self.error_code)
 
     def fail_out_check(self):
-        print(self.dname, 'fail_out_check', self.sys_chans['fail'].val)
-        if self.sys_chans['fail'].val:    # GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+        print(self.dname, 'fail_out_check')
+        print(self.sys_chans['fail'].val)
+        if not np.count_nonzero(self.fail_count):
             self.sys_chans['fail'].setValue(0)
-            self.ofr_list.delete(self.dname.split('.')[-1])
+            if self.dname.split('.')[-1] in self.ofr_list:
+                self.ofr_list.remove(self.dname.split('.')[-1])
             print(self.ofr_list, 'fail_out_check')
             self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
 
@@ -214,11 +220,12 @@ class Cond:
                             self.tout_run = True
                             self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.curr_state, True))
                     else:
-                        print('I am here')
+                        self.fail_count[0] = 0
                         self.fail_out_check()
         else:    # Timer called curr_state
             if abs(val_1) and abs(val_2) > 200:
                 if abs(val_2 - val_1) > 0.05 * val_1:
+                    self.fail_count[0] = 1
                     self.error_data_send()
             self.tout_run = False
 
@@ -226,8 +233,10 @@ class Cond:
         self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim']:
+            self.fail_count[1] = 0
             self.fail_out_check()
         else:
+            self.fail_count[1] = 1
             self.error_data_send()
             print('r_state')
 
@@ -235,8 +244,10 @@ class Cond:
         print("is_on here", self.dname, self.values[self.dname + '.' + self.cnd['chans'][0]])
         self.error_code = self.cnd['err_code']
         if self.values[self.dname + '.' + self.cnd['chans'][0]]:
+            self.fail_count[2] = 0
             self.fail_out_check()
         else:
+            self.fail_count[2] = 1
             self.error_data_send()
 
     def ilk(self, in_call):
