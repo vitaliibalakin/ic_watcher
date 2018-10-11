@@ -57,8 +57,8 @@ class IcWatcher:
         self.conditions_ist = [
             {'func': 'curr_state', 'chans': ['Iset', 'dcct1'], 'wait_time': 3000, 'up_lim': 5000,
              'down_lim': 0, 'err_code': 'I_mes_problem'},
-            {'func': 'is_on', 'chans': ['is_on'], 'err_code': 'PS is off'},
-            {'func': 'ilk', 'chans': ['ilk_imax', 'ilk_umax', 'ilk_out_pro', 'ilk_phase', 'ilk_temp', 'ilk_water',
+            {'func': 'is_on', 'chans': ['is_on'], 'err_code': 'is_on'},
+            {'func': 'ilk', 'chans': ['ilk_imax', 'ilk_umax', 'ilk_out_prot', 'ilk_phase', 'ilk_temp', 'ilk_water',
                                       'ilk_battery'], 'wait_time': 3000, 'err_code': 'Interlock'}]
 
         self.conditions_dict = {'UM15': self.conditions_um15, 'UM4': self.conditions_um4, 'vaciva': self.conditions_vs,
@@ -120,10 +120,11 @@ class Dev:
                 chan = cda.DChan('cxhw:1' + '.' + dname.split('.')[-1] + '.' + dchan)
                 self.sys_chans[dchan] = chan
         try:
-            chan = cda.DChan(dname + '.' + 'rst_ilks')
+            chan = cda.DChan('canhw:11' + '.' + dname.split('.')[-1] + '.' + 'rst_ilks')
             self.sys_chans['rst_ilks'] = chan
-        except:
-            pass
+        except Exception as err:
+            print(err)
+        print('sys_chan', self.sys_chans)
 
         for dchan in dtype:
             chan = cda.DChan(dname + '.' + dchan)
@@ -156,6 +157,7 @@ class Cond:
         # 0 position is curr_state, 1 is range_state, 2 is is_on, 3 is ilk
         self.fail_count = fail_count
         self.values = values
+        print(self.values)
         self.dname = dname
         self.dchan = dchan
         self.cnd = cnd
@@ -168,6 +170,11 @@ class Cond:
         self.error_code = ' '
 
     def error_data_send(self):
+        """
+        func collects the fail statuses from whole power supply parts
+        :return:  sent this collected info and general status PS FAIL to CX-server, if some fail=1 add the PS to
+        *Out_of_running* list
+        """
         print(self.dname, 'error_data_send')
         print(self.sys_chans['fail'].val)
         if np.count_nonzero(self.fail_count):
@@ -184,6 +191,10 @@ class Cond:
             print("REAL FAIL, GUYS", self.dname, self.error_code)
 
     def fail_out_check(self):
+        """
+        func collects the fail statuses from whole power supply parts
+        :return: if all fails=0, remove the PS from *Out_of_running* list
+        """
         print(self.dname, 'fail_out_check')
         print(self.sys_chans['fail'].val)
         if not np.count_nonzero(self.fail_count):
@@ -194,9 +205,13 @@ class Cond:
             self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
 
             time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + 'WAS_TURN_ON'
+            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code + '|' + 'PS IS RUNNING'
             self.sys_info_d['logs'].setValue(log)
             print("UNCHECKED FAIL", self.dname)
+        else:
+            time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
+            self.sys_info_d['logs'].setValue(log)
 
     # def curr_timer_run(self):
     #     val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
@@ -208,6 +223,11 @@ class Cond:
     #     self.tout_run = False
 
     def curr_state(self, in_call):
+        """
+        func is called then power supplier current changes
+        :param in_call: False, if callback calls the func; True, if timer calls
+        :return: nothing, gives fail=1 if measured ps current differ then given; fail=0 instead
+        """
         self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
@@ -230,6 +250,11 @@ class Cond:
             self.tout_run = False
 
     def range_state(self, in_call):
+        """
+        func is called then power supplier current changes
+        :param in_call: False, if callback calls the func; True, if timer calls
+        :return: nothing, gives fail=1 if ps current above or below the required values; fail=0 instead
+        """
         self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim']:
@@ -241,6 +266,11 @@ class Cond:
             print('r_state')
 
     def is_on(self, in_call):
+        """
+        func is called then power supplier status changes
+        :param in_call: False, if callback calls the func; True, if timer calls
+        :return: nothing, gives fail=1 if PS is off; fail=1 instead
+        """
         print("is_on here", self.dname, self.values[self.dname + '.' + self.cnd['chans'][0]])
         self.error_code = self.cnd['err_code']
         if self.values[self.dname + '.' + self.cnd['chans'][0]]:
@@ -251,26 +281,50 @@ class Cond:
             self.error_data_send()
 
     def ilk(self, in_call):
-        pass
-        # print('ilk', self.dname, in_call, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
-        # if not in_call:
-        #     if self.values[self.dname + '.' + self.dchan]:
-        #         self.timer.singleShot(self.cnd['wait_time'], self.reset_ilks)
-        #     else:
-        #         self.fail_out_check()
-        #
-        # if in_call:
-        #     if self.values[self.dname + '.' + self.dchan]:
-        #         self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_usefull'
-        #         self.error_data_send()
-        #     else:
-        #         self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_turned_on'
-        #         time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        #         log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
-        #         self.sys_info_d['logs'].setValue(log)
+        """
+        func is called then power supplier interlocks (ilks) status changes
+        :param in_call: False, if callback calls the func; True, if timer calls
+        :return: nothing, gives fail=1 if some ilks is on; fail=0 instead
+        """
+        print('ilk', self.dname, in_call, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
+        flag = False
+        for chan in self.cnd['chans']:
+            flag = flag or self.values[self.dname + '.' + chan]
+
+        if not in_call:
+            if not flag:
+                if self.fail_count[3]:
+                    self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
+                    self.fail_count[3] = 0
+                    self.fail_out_check()
+            elif flag and self.values[self.dname + '.' + self.dchan]:
+                self.fail_count[3] = 1
+                self.timer.singleShot(self.cnd['wait_time'], self.reset_ilks)
+            elif flag and (not self.values[self.dname + '.' + self.dchan]):
+                self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
+                self.fail_count[3] = 1
+                self.error_data_send()
+            else:
+                print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
+
+        if in_call:
+            if not flag:
+                if self.fail_count[3]:
+                    self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_turned_on'
+                    self.fail_count[3] = 0
+                    self.fail_out_check()
+            elif flag and self.values[self.dname + '.' + self.dchan]:
+                self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_usefull'
+                self.error_data_send()
+            elif flag and (not self.values[self.dname + '.' + self.dchan]):
+                self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_turned_on'
+                self.error_data_send()
+            else:
+                print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
 
     def reset_ilks(self):
-        self.sys_chans['rst_ikls'].setValue(1)
+        print(self.sys_chans)
+        self.sys_chans['rst_ilks'].setValue(1)
         self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.ilk, True))
 
 
