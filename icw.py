@@ -119,12 +119,6 @@ class Dev:
             else:
                 chan = cda.DChan('cxhw:1' + '.' + dname.split('.')[-1] + '.' + dchan)
                 self.sys_chans[dchan] = chan
-        try:
-            chan = cda.DChan('canhw:11' + '.' + dname.split('.')[-1] + '.' + 'rst_ilks')
-            self.sys_chans['rst_ilks'] = chan
-        except Exception as err:
-            print(err)
-        print('sys_chan', self.sys_chans)
 
         for dchan in dtype:
             chan = cda.DChan(dname + '.' + dchan)
@@ -164,7 +158,6 @@ class Cond:
         self.sys_chans = sys_chans
         self.sys_info_d = sys_info_d
         self.ofr_list = ofr_list
-        self.timer = QTimer()
         self.tout_run = False
         self.aout_run = 0
         self.error_code = ' '
@@ -238,7 +231,7 @@ class Cond:
                     if abs(val_2 - val_1) > 0.05 * val_1:
                         if not self.tout_run:
                             self.tout_run = True
-                            self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.curr_state, True))
+                            QTimer().singleShot(self.cnd['wait_time'], functools.partial(self.curr_state, True))
                     else:
                         self.fail_count[0] = 0
                         self.fail_out_check()
