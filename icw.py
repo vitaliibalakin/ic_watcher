@@ -286,46 +286,25 @@ class Cond:
         :param in_call: False, if callback calls the func; True, if timer calls
         :return: nothing, gives fail=1 if some ilks is on; fail=0 instead
         """
-        print('ilk', self.dname, in_call, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
+        print('ilk', self.dname, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
         flag = False
         for chan in self.cnd['chans']:
             flag = flag or self.values[self.dname + '.' + chan]
 
-        if not in_call:
-            if not flag:
-                if self.fail_count[3]:
-                    self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
-                    self.fail_count[3] = 0
-                    self.fail_out_check()
-            elif flag and self.values[self.dname + '.' + self.dchan]:
-                self.fail_count[3] = 1
-                self.timer.singleShot(self.cnd['wait_time'], self.reset_ilks)
-            elif flag and (not self.values[self.dname + '.' + self.dchan]):
+        if not flag:
+            if self.fail_count[3]:
                 self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
-                self.fail_count[3] = 1
-                self.error_data_send()
-            else:
-                print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
-
-        if in_call:
-            if not flag:
-                if self.fail_count[3]:
-                    self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_turned_on'
-                    self.fail_count[3] = 0
-                    self.fail_out_check()
-            elif flag and self.values[self.dname + '.' + self.dchan]:
-                self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_is_usefull'
-                self.error_data_send()
-            elif flag and (not self.values[self.dname + '.' + self.dchan]):
-                self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'auto_turned_on'
-                self.error_data_send()
-            else:
-                print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
-
-    def reset_ilks(self):
-        print(self.sys_chans)
-        self.sys_chans['rst_ilks'].setValue(1)
-        self.timer.singleShot(self.cnd['wait_time'], functools.partial(self.ilk, True))
+                self.fail_count[3] = 0
+                self.fail_out_check()
+        elif self.values[self.dname + '.' + self.dchan]:
+            self.error_code = self.dchan + '|' + self.cnd['err_code']
+            self.fail_count[3] = 1
+            self.error_data_send()
+        elif not self.values[self.dname + '.' + self.dchan]:
+            self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
+            self.error_data_send()
+        else:
+            print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
 
 
 app = QApplication(['IcWatcher'])
