@@ -290,7 +290,6 @@ class Cond:
         flag = False
         for chan in self.cnd['chans']:
             flag = flag or self.values[self.dname + '.' + chan]
-
         if not flag:
             if self.fail_count[3]:
                 self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
