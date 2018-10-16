@@ -83,8 +83,10 @@ class IcWatcherAutomatic:
         elif chan.val and self.atimer_run:
             self.atimer_run = False
             print('user turned on PS')
+        elif chan.val:
+            print('auto tuned on')
         else:
-            print('automatics tuned on PS')
+            print('whaaaat, I shouldnt be there')
 
     def reset(self, chan_fail, chan, in_call):
         """
@@ -94,10 +96,13 @@ class IcWatcherAutomatic:
         :param in_call: channel number in rst_list
         :return: nothing
         """
-        in_call += 1
-        chan.setValue(1)
-        QTimer().singleShot(1500, functools.partial(self.auto_run, chan_fail, in_call))
-        print(chan.name)
+        if self.atimer_run:
+            in_call += 1
+            chan.setValue(1)
+            QTimer().singleShot(1500, functools.partial(self.auto_run, chan_fail, in_call))
+            print(chan.name)
+        else:
+            print('emergency stop auto')
 
     # try:
     #     chan = cda.DChan('canhw:11' + '.' + dname.split('.')[-1] + '.' + 'rst_ilks')
