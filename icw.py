@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
 
@@ -29,15 +31,15 @@ class IcWatcher:
 
         self.dev_chans_list = []
 
-        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 5000,
+        self.conditions_um4 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 8000,
                                 'down_lim': 200, 'err_code': 'I_mes_problem'},
-                               {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 10, 'down_lim': 0,
+                               {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 13, 'down_lim': 0,
                                 'err_code': 'U_out_of_range'}]
         self.conditions_vs = [{'func': 'range_state', 'chans': ['Imes'], 'up_lim': 256, 'down_lim': 0,
                                'err_code': 'I_out_of_range'},
                               {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 7, 'down_lim': 2,
                                'err_code': 'U_out_of_range'}]
-        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 5000,
+        self.conditions_um15 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 8000,
                                  'down_lim': 200, 'err_code': 'I_mes_problem'}]
         self.conditions_vch300 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 1000,
                                    'down_lim': 0, 'err_code': 'I_mes_problem'}]
@@ -45,7 +47,7 @@ class IcWatcher:
                                  'down_lim': 0, 'err_code': 'I_mes_problem'}]
         self.conditions_pa10 = [{'func': 'curr_state', 'chans': ['Iset', 'Imes'], 'wait_time': 3000, 'up_lim': 1000,
                                  'down_lim': 0, 'err_code': 'I_mes_problem'},
-                                {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 10, 'down_lim': 0,
+                                {'func': 'range_state', 'chans': ['Umes'], 'up_lim': 13, 'down_lim': 0,
                                  'err_code': 'U_out_of_range'}]
         self.conditions_vch1000 = [
             {'func': 'curr_state', 'chans': ['Iset', 'dcct1'], 'wait_time': 3000, 'up_lim': 5000,
@@ -85,6 +87,7 @@ class IcWatcher:
         self.cur.execute("select devtype.name, chan.name from chan,devtype_chans,devtype "
                          "where chan.id=devtype_chans.chan_id and devtype.id=devtype_chans.devtype_id and "
                          "devtype.name in ('UM4', 'UM15', 'vaciva', 'vac124', 'vch300', 'v300', 'pa10', 'vch1000', 'ist') group by grouping sets((devtype.name, chan.name))")
+        # 'UM4', 'UM15', 'vaciva', 'vac124', 'vch300', 'v300', 'pa10', 'vch1000', 'ist'
         for elem in self.cur.fetchall():
             self.chans_dict[elem[0]].append(elem[1])
         print(self.chans_dict)
@@ -92,9 +95,9 @@ class IcWatcher:
         self.cur.execute("select devtype.name, namesys.name || '.' || dev.name as full_name from dev,dev_devtype,devtype, namesys "
                          "where dev.id=dev_devtype.dev_id and devtype.id=dev_devtype.devtype_id and namesys.id=dev.namesys_id and "
                          "devtype.name in ('UM4', 'UM15', 'vaciva', 'vac124', 'vch300', 'v300', 'pa10', 'vch1000', 'ist') group by grouping sets((devtype.name, full_name))")
-        # for elem in self.cur.fetchall():
-        #     self.devnames_dict[elem[0]].append(elem[1])
-        self.devnames_dict['ist'].append('canhw:11.vit_sim_ist')
+        for elem in self.cur.fetchall():
+            self.devnames_dict[elem[0]].append(elem[1])
+        # self.devnames_dict['ist'].append('canhw:11.vit_sim_ist')
         print('devname_dict', self.devnames_dict)
 
         for elem in self.devnames_dict:
@@ -151,7 +154,7 @@ class Cond:
         # 0 position is curr_state, 1 is range_state, 2 is is_on, 3 is ilk
         self.fail_count = fail_count
         self.values = values
-        print(self.values)
+        # print(self.values)
         self.dname = dname
         self.dchan = dchan
         self.cnd = cnd
@@ -161,50 +164,32 @@ class Cond:
         self.tout_run = False
         self.aout_run = 0
         self.error_code = ' '
+        self.sys_info_d['ofr'].setValue(json.dumps([]))
 
-    def error_data_send(self):
+    def log_manager(self):
         """
         func collects the fail statuses from whole power supply parts
-        :return:  sent this collected info and general status PS FAIL to CX-server, if some fail=1 add the PS to
-        *Out_of_running* list
+        :return:  sent collected info and general status PS FAIL to CX-server, if some fail=1 add the PS to
+        *Out_of_running* list or remove from it if fail=0
         """
         print(self.dname, 'error_data_send')
         print(self.sys_chans['fail'].val)
         if np.count_nonzero(self.fail_count):
-            time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
-            self.sys_info_d['logs'].setValue(log)
-
             if not (self.dname.split('.')[-1] in self.ofr_list):
+                time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.ofr_list.append(self.dname.split('.')[-1])
-            print(self.ofr_list, 'error_data_send')
-            self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
-
-            self.sys_chans['fail'].setValue(1)
-            print("REAL FAIL, GUYS", self.dname, self.error_code)
-
-    def fail_out_check(self):
-        """
-        func collects the fail statuses from whole power supply parts
-        :return: if all fails=0, remove the PS from *Out_of_running* list
-        """
-        print(self.dname, 'fail_out_check')
-        print(self.sys_chans['fail'].val)
-        if not np.count_nonzero(self.fail_count):
-            self.sys_chans['fail'].setValue(0)
-            if self.dname.split('.')[-1] in self.ofr_list:
-                self.ofr_list.remove(self.dname.split('.')[-1])
-            print(self.ofr_list, 'fail_out_check')
-            self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
-
-            time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code + '|' + 'PS IS RUNNING'
-            self.sys_info_d['logs'].setValue(log)
-            print("UNCHECKED FAIL", self.dname)
+                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
+                self.sys_chans['fail'].setValue(1)
+                log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
+                self.sys_info_d['logs'].setValue(log)
         else:
-            time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
-            self.sys_info_d['logs'].setValue(log)
+            if self.dname.split('.')[-1] in self.ofr_list:
+                time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.ofr_list.remove(self.dname.split('.')[-1])
+                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
+                self.sys_chans['fail'].setValue(0)
+                log = str(time) + '|' + self.dname.split('.')[-1] + '|' + 'PS IS RUNNING'
+                self.sys_info_d['logs'].setValue(log)
 
     # def curr_timer_run(self):
     #     val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
@@ -227,19 +212,21 @@ class Cond:
         print('curr_state', self.dname, in_call, val_1, val_2)
         if not in_call:    # Not-timer called curr_state
             if val_1 and val_2:
-                if self.cnd['up_lim'] > (abs(val_1) and abs(val_2)) >= self.cnd['down_lim']:
-                    if abs(val_2 - val_1) > 0.05 * val_1:
+                if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim'] and \
+                        self.cnd['up_lim'] > abs(val_2) >= self.cnd['down_lim']:
+                    if abs(val_2 - val_1) > 0.05 * abs(val_1):
                         if not self.tout_run:
                             self.tout_run = True
                             QTimer().singleShot(self.cnd['wait_time'], functools.partial(self.curr_state, True))
                     else:
                         self.fail_count[0] = 0
-                        self.fail_out_check()
+                        self.log_manager()
         else:    # Timer called curr_state
-            if abs(val_1) and abs(val_2) > 200:
-                if abs(val_2 - val_1) > 0.05 * val_1:
+            if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim'] and \
+                        self.cnd['up_lim'] > abs(val_2) >= self.cnd['down_lim']:
+                if abs(val_2 - val_1) > 0.05 * abs(val_1):
                     self.fail_count[0] = 1
-                    self.error_data_send()
+                    self.log_manager()
             self.tout_run = False
 
     def range_state(self, in_call):
@@ -250,12 +237,12 @@ class Cond:
         """
         self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
-        if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim']:
+        if self.cnd['up_lim'] >= abs(val_1) >= self.cnd['down_lim']:
             self.fail_count[1] = 0
-            self.fail_out_check()
+            self.log_manager()
         else:
             self.fail_count[1] = 1
-            self.error_data_send()
+            self.log_manager()
             print('r_state')
 
     def is_on(self, in_call):
@@ -268,10 +255,10 @@ class Cond:
         self.error_code = self.cnd['err_code']
         if self.values[self.dname + '.' + self.cnd['chans'][0]]:
             self.fail_count[2] = 0
-            self.fail_out_check()
+            self.log_manager()
         else:
             self.fail_count[2] = 1
-            self.error_data_send()
+            self.log_manager()
 
     def ilk(self, in_call):
         """
@@ -287,14 +274,14 @@ class Cond:
             if self.fail_count[3]:
                 self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
                 self.fail_count[3] = 0
-                self.fail_out_check()
+                self.log_manager()
         elif self.values[self.dname + '.' + self.dchan]:
             self.error_code = self.dchan + '|' + self.cnd['err_code']
             self.fail_count[3] = 1
-            self.error_data_send()
+            self.log_manager()
         elif not self.values[self.dname + '.' + self.dchan]:
             self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
-            self.error_data_send()
+            self.log_manager()
         else:
             print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
 
