@@ -9,6 +9,9 @@ import json
 
 
 class IcWatcherInfo(QMainWindow):
+    """
+    show DR elements info
+    """
     def __init__(self):
         super(IcWatcherInfo, self).__init__()
         uic.loadUi("icw_info.ui", self)
@@ -36,7 +39,8 @@ class IcWatcherInfo(QMainWindow):
             self.ofr_text.setText('OK')
 
 
-app = QApplication(['IcWatcherInfo'])
-w = IcWatcherInfo()
-w.show()
-sys.exit(app.exec_())
+if __name__ == "__main__":
+    app = QApplication(['IcWatcherInfo'])
+    w = IcWatcherInfo()
+    w.show()
+    sys.exit(app.exec_())

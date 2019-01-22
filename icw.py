@@ -17,6 +17,9 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 class IcWatcher:
+    """
+    watching for DR elements status
+    """
     def __init__(self):
         super(IcWatcher, self).__init__()
         try:
@@ -286,6 +289,7 @@ class Cond:
             print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
 
 
-app = QApplication(['IcWatcher'])
-w = IcWatcher()
-sys.exit(app.exec_())
+if __name__ == "__main__":
+    app = QApplication(['IcWatcher'])
+    w = IcWatcher()
+    sys.exit(app.exec_())
