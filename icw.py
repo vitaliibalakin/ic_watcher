@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTimer
+# from PyQt5.QtWidgets import QApplication
+
+from aQt.QtCore import QTimer
 
 import sys
 import json
@@ -12,6 +13,8 @@ import functools
 import operator
 import numpy as np
 import pycx4.qcda as cda
+
+from aux.service_daemon import QtService
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -175,8 +178,8 @@ class Cond:
         :return:  sent collected info and general status PS FAIL to CX-server, if some fail=1 add the PS to
         *Out_of_running* list or remove from it if fail=0
         """
-        print(self.dname, 'error_data_send')
-        print(self.sys_chans['fail'].val)
+        # print(self.dname, 'error_data_send')
+        # print(self.sys_chans['fail'].val)
         if np.count_nonzero(self.fail_count):
             if not (self.dname.split('.')[-1] in self.ofr_list):
                 time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -212,7 +215,7 @@ class Cond:
         self.error_code = self.cnd['err_code']
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
-        print('curr_state', self.dname, in_call, val_1, val_2)
+        # print('curr_state', self.dname, in_call, val_1, val_2)
         if not in_call:    # Not-timer called curr_state
             if val_1 and val_2:
                 if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim'] and \
@@ -246,7 +249,7 @@ class Cond:
         else:
             self.fail_count[1] = 1
             self.log_manager()
-            print('r_state')
+            # print('r_state')
 
     def is_on(self, in_call):
         """
@@ -254,7 +257,7 @@ class Cond:
         :param in_call: False, if callback calls the func; True, if timer calls
         :return: nothing, gives fail=1 if PS is off; fail=1 instead
         """
-        print("is_on here", self.dname, self.values[self.dname + '.' + self.cnd['chans'][0]])
+        # print("is_on here", self.dname, self.values[self.dname + '.' + self.cnd['chans'][0]])
         self.error_code = self.cnd['err_code']
         if self.values[self.dname + '.' + self.cnd['chans'][0]]:
             self.fail_count[2] = 0
@@ -269,7 +272,7 @@ class Cond:
         :param in_call: False, if callback calls the func; True, if timer calls
         :return: nothing, gives fail=1 if some ilks is on; fail=0 instead
         """
-        print('ilk', self.dname, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
+        # print('ilk', self.dname, self.dname + '.' + self.dchan, self.values[self.dname + '.' + self.dchan])
         flag = False
         for chan in self.cnd['chans']:
             flag = flag or self.values[self.dname + '.' + chan]
@@ -286,10 +289,22 @@ class Cond:
             self.error_code = self.dchan + '|' + self.cnd['err_code'] + '|' + 'user_turned_on'
             self.log_manager()
         else:
-            print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
+            pass
+            # print('whats up, I shouldnt be here!', flag, self.values[self.dname + '.' + self.dchan])
 
 
-if __name__ == "__main__":
-    app = QApplication(['IcWatcher'])
-    w = IcWatcher()
-    sys.exit(app.exec_())
+# if __name__ == "__main__":
+#     app = QApplication(['IcWatcher'])
+#     w = IcWatcher()
+#     sys.exit(app.exec_())
+
+
+class ICWService(QtService):
+    def main(self):
+        self.w = IcWatcher()
+
+    def clean(self):
+        self.log_str('exiting from icw')
+
+
+icw_d = ICWService("ic_watcher")
