@@ -121,6 +121,8 @@ class Dev:
         self.values = {}
         self.cnd_callback = {}
         self.sys_chans = {}
+        self.ps_error = {'time': 0, 'val': 0, 'prev': 0}
+
         for dchan in dstate_chans:
             if dname == 'canhw:11.vit_sim_ist':
                 chan = cda.DChan('canhw:11' + '.' + dname.split('.')[-1] + '.' + dchan)
@@ -140,27 +142,26 @@ class Dev:
                         if chan.name.split('.')[-1] == cnd_name:
                             # print(chan.name, cnd_name)
                             self.cnd_callback[chan.name] = getattr(Cond(dname, dchan, self.values, elem, self.sys_chans,
-                                                                        sys_info_d, ofr_list, self.fail_count),
-                                                                   elem['func'])
+                                                                        sys_info_d, ofr_list, self.fail_count,
+                                                                        self.ps_error), elem['func'])
                 except Exception as err:
                     print('callbacks creating', err)
 
     def ps_change_state(self, chan):
         self.values[chan.name] = chan.val
         if chan.name in self.cnd_callback:
+            self.ps_error['val'] = chan.val
+            self.ps_error['time'] = chan.time
+            self.ps_error['prev'] = chan.prev_time
             self.cnd_callback[chan.name](False)
-        else:
-            pass
-            # print('kek')
 
 
 class Cond:
-    def __init__(self, dname, dchan, values, cnd, sys_chans, sys_info_d, ofr_list, fail_count):
+    def __init__(self, dname, dchan, values, cnd, sys_chans, sys_info_d, ofr_list, fail_count, ps_error):
         super(Cond, self).__init__()
         # 0 position is curr_state, 1 is range_state, 2 is is_on, 3 is ilk
         self.fail_count = fail_count
         self.values = values
-        # print(self.values)
         self.dname = dname
         self.dchan = dchan
         self.cnd = cnd
@@ -168,10 +169,9 @@ class Cond:
         self.sys_info_d = sys_info_d
         self.ofr_list = ofr_list
         self.tout_run = False
-        self.aout_run = 0
         self.error_code = ' '
         self.sys_info_d['ofr'].setValue(json.dumps([]))
-        self.time = 0
+        self.ps_error = ps_error
 
     def log_manager(self, source):
         """
@@ -179,19 +179,21 @@ class Cond:
         :return:  sent collected info and general status PS FAIL to CX-server, if some fail=1 add the PS to
         *Out_of_running* list or remove from it if fail=0
         """
-        # print(self.dname, 'error_data_send')
-        # print(self.sys_chans['fail'].val)
         if self.fail_count[source]:
             if not (self.dname.split('.')[-1] in self.ofr_list):
                 time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.ofr_list.append(self.dname.split('.')[-1])
-                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
-                self.sys_chans['fail'].setValue(1)
                 log = str(time) + '|' + self.dname.split('.')[-1] + '|' + self.error_code
+                self.sys_chans['fail'].setValue(1)
+                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
                 self.sys_info_d['logs'].setValue(log)
+
                 if self.dname.split('.')[-1] == 'WG1_2':
-                    self.time = datetime.datetime.now()
-                    print('WG1_2', self.time)
+                    if self.error_code == 'U_out_of_range':
+                        print('WG1_2_err', self.ps_error, self.ofr_list, self.fail_count)
+            elif self.dname.split('.')[-1] == 'WG1_2':
+                if self.error_code == 'U_out_of_range':
+                    print('WG1_2_still_out', self.ps_error, self.ofr_list, self.fail_count)
         s = 0
         for k, v in self.fail_count.items():
             s += v
@@ -199,13 +201,14 @@ class Cond:
             if self.dname.split('.')[-1] in self.ofr_list:
                 time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.ofr_list.remove(self.dname.split('.')[-1])
-                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
-                self.sys_chans['fail'].setValue(0)
                 log = str(time) + '|' + self.dname.split('.')[-1] + '|' + 'PS IS RUNNING'
+                self.sys_chans['fail'].setValue(0)
+                self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
                 self.sys_info_d['logs'].setValue(log)
+
                 if self.dname.split('.')[-1] == 'WG1_2':
-                    self.time = self.time - datetime.datetime.now()
-                    print('WG1_2', self.time)
+                    if self.error_code == 'U_out_of_range':
+                        print('WG1_2_run', self.ps_error, self.ofr_list, self.fail_count)
 
     # def curr_timer_run(self):
     #     val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
@@ -226,7 +229,7 @@ class Cond:
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         val_2 = self.values[self.dname + '.' + self.cnd['chans'][1]]
         # print('curr_state', self.dname, in_call, val_1, val_2)
-        if not in_call:    # Not-timer called curr_state
+        if not in_call:    # Non-timer called curr_state
             if val_1 and val_2:
                 if self.cnd['up_lim'] > abs(val_1) >= self.cnd['down_lim'] and \
                         self.cnd['up_lim'] > abs(val_2) >= self.cnd['down_lim']:
@@ -255,12 +258,9 @@ class Cond:
         val_1 = self.values[self.dname + '.' + self.cnd['chans'][0]]
         if self.cnd['up_lim'] >= abs(val_1) >= self.cnd['down_lim']:
             self.fail_count['range_state'] = 0
-            self.log_manager('range_state')
-            # print('r_state okay', self.dname + '.' + self.cnd['chans'][0], val_1)
         else:
             self.fail_count['range_state'] = 1
-            self.log_manager('range_state')
-            # print('r_state not okay', self.dname + '.' + self.cnd['chans'][0], val_1)
+        self.log_manager('range_state')
 
     def is_on(self, in_call):
         """
@@ -272,10 +272,9 @@ class Cond:
         self.error_code = self.cnd['err_code']
         if self.values[self.dname + '.' + self.cnd['chans'][0]]:
             self.fail_count['is_on'] = 0
-            self.log_manager('is_on')
         else:
             self.fail_count['is_on'] = 1
-            self.log_manager('is_on')
+        self.log_manager('is_on')
 
     def ilk(self, in_call):
         """
