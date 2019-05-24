@@ -6,6 +6,7 @@ from PyQt5 import uic
 import sys
 import pycx4.qcda as cda
 import json
+import pyqtgraph as pg
 
 
 class IcWatcherInfo(QMainWindow):
@@ -15,6 +16,11 @@ class IcWatcherInfo(QMainWindow):
     def __init__(self):
         super(IcWatcherInfo, self).__init__()
         uic.loadUi("icw_info.ui", self)
+        # f = pg.PlotWidget()
+        # label = pg.TextItem('Vacuum', angle=90, rotateAxis=None)
+        # f.addItem(label)
+        # self.gridLayout.addWidget(f, 1, 0)
+
         self.sys_info = {'logs': cda.StrChan('cxhw:1.ic_watcher.logs', max_nelems=1024, on_update=1),
                          'ofr': cda.StrChan('cxhw:1.ic_watcher.ofr', max_nelems=1024, on_update=1)}
         for chan in self.sys_info:
