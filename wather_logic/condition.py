@@ -51,7 +51,7 @@ class Cond:
         if not s:
             if self.dname.split('.')[-1] in self.ofr_list:
                 time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.ofr_list.remove(self.dname.split('.')[-1])
+                self.ofr_list.delete(self.dname.split('.')[-1])
                 log = str(time) + '|' + self.dname.split('.')[-1] + '|' + 'PS IS RUNNING'
                 self.sys_chans['fail'].setValue(0)
                 self.sys_info_d['ofr'].setValue(json.dumps(self.ofr_list))
